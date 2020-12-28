@@ -1,56 +1,64 @@
-# Libraries and dir ----
-x<-c("data.table", "dplyr", "xlsx", "tidyr", "lubridate")
+# Libraries ----
+x <- c("data.table", "dplyr", "tidyr", "lubridate", "openxlsx")
 lapply(x, require, character.only = TRUE)
-setwd('C:/Users/Jarek/Desktop/Private/Budget')
 
-# Files paths ----
-a <- list.files(path = "C:/Users/Jarek/Desktop/Private/Budget")
-for (el in 1:length(a)) {
-  if (a[el] %like% "Feed_*") {
-    feed_file = a[el]
-  }
-}
-budget_file <- "C:/Users/Jarek/Desktop/Private/Budget/B_Budget.xlsx"
+# Directories ----
+setwd('C:/Users/WealthArc/Downloads')
+budget_file <- "Budżet_fix.xlsx"
+feed_file_jarek <- 'transactions_export_2020-12-27_jarek.csv'
+feed_file_ela <- 'transactions_export_2020-12-27_ela.csv'
 
-# Read data ----
-feed_data <- read.csv2(feed_file, sep = ",", encoding = "UTF-8", stringsAsFactors = F)
-colnames(feed_data)[1] <- 'date'
-dict <- read.xlsx(file = budget_file, sheetName = "dict", encoding = "UTF-8", stringsAsFactors = F)
-budget_2018 <- read.xlsx(file = budget_file, sheetName = "budget_2018",
-                         encoding = "UTF-8", stringsAsFactors = F)
-budget_2019 <- read.xlsx(file = budget_file, sheetName = "budget_2019_v1",
-                         encoding = "UTF-8", stringsAsFactors = F)
+# Get data ----
+feed_data_jarek <- read.csv2(feed_file_jarek, sep = ",", encoding = "UTF-8", 
+                             stringsAsFactors = F)
+feed_data_ela <- read.csv2(feed_file_ela, sep = ",", encoding = "UTF-8",
+                           stringsAsFactors = F)
+
+dict <- read.xlsx(xlsxFile = budget_file, sheet = 'dict')
+
+bud18 <- read.xlsx(xlsxFile = budget_file, sheet = 'budget_2018')
+bud19 <- read.xlsx(xlsxFile = budget_file, sheet = 'budget_2019')
+bud20 <- read.xlsx(xlsxFile = budget_file, sheet = 'budget_2020',
+                         rows = c(1:23), cols = c(1:14))
+bud21 <- read.xlsx(xlsxFile = budget_file, sheet = 'budget_2021',
+                         rows = c(1:23), cols = c(1:14))
 
 # Transform data ----
-spendee_data <- feed_data %>%
-  select(date,
-         wallet = Portfel,
-         name = Nazwa.kategorii,
-         amount = Kwota) %>%
+feed_data <- rbind(feed_data_jarek, feed_data_ela) %>%
+  select(date = Date,
+         wallet = Wallet,
+         name = Category.name,
+         amount = Amount) %>%
   mutate(date = as.Date(date),
          amount = as.numeric(format(amount, decimal.mark = '.')))
 
-bud18 <- gather(budget_2018, date, amount, X2018.01.01:X2018.12.01) %>%
-  mutate(date = ymd(substr(date, 2, length(date))))
-bud19 <- gather(budget_2019, date, amount, X2019.01.01:X2019.12.01) %>%
-  mutate(date = ymd(substr(date, 2, length(date))))
+bud18 <- gather(bud18, date, amount, `2018-01-01`:`2018-12-01`) %>%
+  mutate(date = ymd(date))
+bud19 <- gather(bud19, date, amount, `2019-01-01`:`2019-12-01`) %>%
+  mutate(date = ymd(date))
+bud20 <- gather(bud20, date, amount, `2020-01-01`:`2020-12-01`) %>%
+  mutate(date = ymd(date))
+bud21 <- gather(bud21, date, amount, `2021-01-01`:`2021-12-01`) %>%
+  mutate(date = ymd(date))
 
-# Join data and create output ----
-spendee_data <- left_join(spendee_data, dict)
+# Merge data ----
+actual <- left_join(feed_data, dict[1:3])
 bud18 <- left_join(bud18, unique(dict[2:3]))
 bud19 <- left_join(bud19, unique(dict[2:3]))
+bud20 <- left_join(bud20, unique(dict[2:3]))
+bud21 <- left_join(bud21, unique(dict[2:3]))
 
-spendee_data$type <- 'Actual'
+actual$type <- 'Actual'
 bud18$type <- 'Budget'
 bud18$name <- NA
 bud19$type <- 'Budget'
 bud19$name <- NA
+bud20$type <- 'Budget'
+bud20$name <- NA
+bud21$type <- 'Budget'
+bud21$name <- NA
 
-output <- rbind(spendee_data, bud18, bud19)
+output <- rbind(actual, bud18, bud19, bud20, bud21)
 
-# Write to file ----
-wb <- loadWorkbook(budget_file)
-removeSheet(wb, sheetName = "output")
-sheet1 <- createSheet(wb, sheetName = "output")
-addDataFrame(output, sheet1, row.names = F)
-saveWorkbook(wb, "C:/Users/Jarek/Desktop/Private/Budget/B_Budget.xlsx")
+# Write output ----
+write.table(output, 'r_output.csv', row.names = F, sep = ',', dec = '.')
